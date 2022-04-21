@@ -1,17 +1,29 @@
-Single cell analysis of iPSC-derived midbrain organoids
-MJP_4/19/2022
+---
+title: "Single cell analysis of iPSC-derived midbrain organoids (GBA1 mutant and controls)"
+author: "MJP"
+date: "4/19/2022"
+output: word_document
+---
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, eval=FALSE)
+```
 
-Introduction
+## Introduction
+
 The following script was used for analysis of gene corrected (GC) versus GBA1 mutant (MUT) midbrain organoids in three different lines at DIV40. 
 The purpose was to combine, filter, integrate and, identify clusters and differentially expressed genes in the different datasets. 
 For details of the samples, refers to the original datasets: GSE198033
-This script is based on the Seurat tutorials last checked in January 2022 
-•	https://satijalab.org/seurat/articles/integration_introduction.html 
-•	https://ucdavis-bioinformatics-training.github.io/2019-single-cell-RNA-sequencing-Workshop-UCD_UCSF/scrnaseq_analysis/scRNA_Workshop-PART1.html
+
+This script is based on the Seurat tutorials last checked in January 2022
+References:
+https://satijalab.org/seurat/articles/integration_introduction.html
+https://ucdavis-bioinformatics-training.github.io/2019-single-cell-RNA-sequencing-Workshop-UCD_UCSF/scrnaseq_analysis/scRNA_Workshop-PART1.html
 
 
-Part 1. Data preparation:
+
+## Part 1. Data preparation:
+```{r}
 # Install and load the libraries
 library(Seurat)
 library(patchwork)
@@ -20,7 +32,7 @@ library(cowplot)
 library(magrittr)
 library(tidyverse)
 
-# Load and combine 10x Runs
+## Load and combine 10x Runs
 setwd("D:.../analysis_results")
 
 GC1.data <- Read10X_h5("1GC_filtered_feature_bc_matrix.h5")
@@ -47,9 +59,16 @@ MUT3.data <- Read10X_h5("3MUT_filtered_feature_bc_matrix.h5")
 MUT3 <- CreateSeuratObject(counts = MUT3.data)
 MUT3
 
-# Merge more than two objects
+## Merge more than two objects
+
 MUT.combined <- Reduce(function(x,y) merge (x,y, all=T), list (GC1, MUT1, GC2, MUT2, GC3, MUT3))
-Part 2. Quality control:
+
+
+```
+
+## Part 2. Quality control: 
+
+```{r}
 # Add number of genes per UMI for each cell to metadata
 MUT.combined$log10GenesPerUMI <- log10(MUT.combined$nFeature_RNA) / log10(MUT.combined$nCount_RNA)
 
@@ -80,7 +99,11 @@ filtered_seurat <- CreateSeuratObject(filtered_counts, meta.data = filtered_seur
 
 # Save.RData object
 save(filtered_seurat, file="seurat_filtered.RData")
-Part 3. Data preparation and normalization:
+```
+
+
+## Part 3. Data preparation and normalization: 
+```{r}
 #Cell cycle scoring. Normalize the counts
 seurat_phase <- NormalizeData(filtered_seurat)
 
@@ -95,7 +118,7 @@ View(seurat_phase@meta.data)
 
 # Identify the most variable genes
 seurat_phase <- FindVariableFeatures(seurat_phase,  selection.method = "vst",nfeatures = 2000, verbose = FALSE)
-             
+		     
 # Scale the counts
 seurat_phase <- ScaleData(seurat_phase)
 
@@ -111,7 +134,11 @@ split_seurat <- SplitObject(filtered_seurat, split.by = "orig.ident")
 for (i in 1:length(split_seurat)) { split_seurat[[i]] <- NormalizeData(split_seurat[[i]], verbose = TRUE)
     split_seurat[[i]] <- CellCycleScoring(split_seurat[[i]], g2m.features=g2m_genes, s.features=s_genes)
     split_seurat[[i]] <- SCTransform(split_seurat[[i]], vars.to.regress = c("mitoRatio", "S.Score", "G2M.Score")) }
-Part 4. Data integration and visualization (directly after Part 3)
+
+```
+
+## Part 4. Data integration and visualization (directly after Part 3)
+```{r}
 # Select the most variable features to use for integration
 integ_features <- SelectIntegrationFeatures(object.list = split_seurat,  nfeatures = 3000) 
 
@@ -126,6 +153,7 @@ organoids.combined.sct <- IntegrateData(anchorset = integ_anchors,  normalizatio
 
 # Save integrated seurat object
 saveRDS(organoids.combined.sct, "integrated_seurat.rds")
+
 
 ## Run the standard workflow for visualization and clustering
 DefaultAssay(organoids.combined.sct) <- "integrated"
@@ -157,22 +185,28 @@ organoids.combined.sct <- ScaleData(organoids.combined.sct, features = all.genes
 DimPlot(organoids.combined.sct, reduction = "umap", group.by = "seurat_clusters", label = TRUE,  repel = TRUE)
 
 DimPlot(organoids.combined.sct, reduction = "umap", split.by = "orig.ident")
-Part 5. Obtain information from the datasets
+```
+
+
+## Part 5. Obtain information from the datasets 
+```{r}
 #Extract identity and sample information from seurat object to determine the number of cells per cluster per sample
 n_cells <- FetchData(organoids.combined.sct,  vars = c("ident", "orig.ident")) %>% dplyr::count(ident, orig.ident) %>% tidyr::spread(ident, n)
 
 write.csv(n_cells, "n_cells.csv")
 
-## Identify conserved cell type markers
-# Switch back to the original data
+#Identify conserved cell type markers
+# For performing differential expression after integration, we switch back to the original data
 DefaultAssay(organoids.combined.sct) <- "RNA"
+
 annotations <- read.csv("annotation.txt")
 
-# conserved markers to any cluster
+##conserved markers to any cluster
 get_conserved <- function(cluster){FindConservedMarkers(organoids.combined.sct, ident.1 = cluster, grouping.var = "orig.ident", only.pos = TRUE) %>% rownames_to_column(var = "gene") %>% left_join(y = unique(annotations[, c("gene_name", "description")]),  by = c("gene" = "gene_name")) %>% cbind(cluster_id = cluster, .)}
 
 # Iterate function across desired clusters. 
 conserved_markers <- map_dfr(0:20, get_conserved)
+
 
 # Extract top 100 markers per cluster
 top100 <- conserved_markers %>%  mutate(avg_fc = (GC1_avg_log2FC +  GC2_avg_log2FC + GC3_avg_log2FC + MUT1_avg_log2FC + MUT2_avg_log2FC + MUT3_avg_log2FC) /6) %>% group_by(cluster_id) %>%  top_n(n = 100,  wt = avg_fc)
@@ -183,17 +217,23 @@ write.csv(top100, "Clusters_top100.csv")
 
 Genes <- c ("SOX2", "DCX", "TH", "NEUROD4") # Change target genes depending on the cell type
 
-# UMAP plot
+##UMAP plot
+
 FeaturePlot(organoids.combined.sct,  reduction = "umap",  features = Genes, sort.cell = TRUE, min.cutoff = 'q10', max.cutoff = 5,label = T, pt.size = 0.5)
 
-# Violin plot
+##Violin plot
 plots <- VlnPlot(organoids.combined.sct, features = Genes, split.by = "orig.ident", pt.size = 0, combine = FALSE)
 wrap_plots(plots = plots, ncol = 1)
 
 # Dot plot
 DotPlot(organoids.combined.sct, features = Genes) + RotatedAxis()
-Part 6. Merge and analyse subclusters
+```
+
+
+## Part 6. Merge and analyse subclusters
+```{r}
 ## Combine the clusters according to the identity
+
 new.cluster.ids <- c(1 = "Radial Glia", 
                      2 = "Neurons", 
                      3 = "NPC",
@@ -214,7 +254,11 @@ Markers <- FindMarkers(organoids.combined.newnames, ident.1 = "GC1", ident.2 = "
 
 #Save
 write.csv(Markers, "DEgenes_cRadial Glia_1couple.csv")
-Part 7. Create a subset of cells from a selected cluster to reanalyze
+
+```
+
+## Part 7. Create a subset of cells from a selected cluster to reanalyze
+```{r}
 Neurons_subset <- subset(organoids.combined.newnames, idents = "Neurons")
 Neurons_subset
 
@@ -229,9 +273,10 @@ PCAPlot(Neurons_subset,
 
 #Run variable features
 Neurons_subset <- FindVariableFeatures(Neurons_subset,  selection.method = "vst", nfeatures = 2000, verbose = FALSE)
-             
+		     
 # Scale the counts
 Neurons_subset <- ScaleData(Neurons_subset)
+
 
 #Find neighbors for cluster analysis
 Neurons_subset <- FindNeighbors(Neurons_subset, reduction = "pca", dims = 1:40)
@@ -249,10 +294,12 @@ DimPlot(Neurons_subset, reduction = "umap", group.by = "orig.ident")
 DimPlot(Neurons_subset, reduction = "umap")
 
 # to remove a non-specific cluster
+
 Finalcluster <- subset(Neurons_subset, idents = 5, invert = T)
 DimPlot(Finalcluster, reduction = "umap")
 
 # To visualize the two conditions side-by-side
+
 DimPlot(Neurons_subset, reduction = "umap", split.by = "orig.ident")
 
 ## Cluster identification. Find conserved markers to any cluster
@@ -272,13 +319,18 @@ top100 <- conserved_markers %>%
 
 #OR save
 write.csv(top100, "Clusters_top100_Neuronsubset.csv")
-Part 8. Differential expressed genes using FIndMarkers with MAST
+
+```
+
+
+## Part 8. Differential expressed genes using FIndMarkers with MAST
+```{r}
 annotations <- read.csv("annotation.txt")
 
 # couple 1
 Markers <- FindMarkers(Neurons_subset, ident.1 = "GC1", ident.2 = "MUT1", group.by = "orig.ident", subset.ident = "11", min.pct = 0.1, test.use = "MAST")  %>%
     rownames_to_column(var = "gene") %>% left_join(y = unique(annotations[, c("gene_name", "description")]), by = c("gene" = "gene_name")) 
-
+  
 write.csv(Markers, "DEgenes_C11Neuron_1couple.csv")
 
 # couple 2
@@ -292,7 +344,13 @@ Markers <- FindMarkers(Neurons_subset, ident.1 = "GC3", ident.2 = "MUT3", group.
     rownames_to_column(var = "gene") %>% left_join(y = unique(annotations[, c("gene_name", "description")]), by = c("gene" = "gene_name")) 
   
 write.csv(Markers, "DEgenes_C11Neuron_3couple.csv")
-Part 9. Analysis of differential expressed genes using FIndMarkers with MAST in non-integrated samples (directly after Part 3)
+
+```
+
+
+
+## Part 9. Analysis of differential expressed genes using FIndMarkers with MAST in non-integrated samples (directly after Part 3)
+```{r}
 # Merge datasets, example analysis for couple 1
 
 organoids.combined.sct <- Reduce(function(x,y) merge(x,y, all=T), list (split_seurat$GC1, split_seurat$MUT1))
@@ -333,10 +391,16 @@ DimPlot(organoids.combined.sct, reduction = "umap", split.by = "orig.ident")
 ## Continue with  Part 5 and/or 6 if needed
 
 ## To analyze the clusters with resolution of 0.6
+
 annotations <- read.csv("annotation.txt")
 
-# Change the cluster as needed
+# Change the clusteras needed
 Markers <- FindMarkers(organoids.combined.sct, ident.1 = "GC1", ident.2 = "MUT1", group.by = "orig.ident", subset.ident = "20", min.pct = 0.1, test.use = "MAST")  %>%  rownames_to_column(var = "gene") %>%  left_join(y = unique(annotations[, c("gene_name", "description")]), by = c("gene" = "gene_name")) 
 
 #save
 write.csv(Markers, "DEgenes_Cluster20_couple1.csv")
+
+```
+
+
+
