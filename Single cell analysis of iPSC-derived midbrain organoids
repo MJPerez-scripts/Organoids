@@ -3,10 +3,22 @@ MJP_4/19/2022
 
 
 Introduction
-The following script was used for analysis of gene corrected (GC) versus GBA1 mutant (MUT) midbrain organoids in three different lines at DIV40. The purpose was to combine, filter, integrate and, identify clusters and differentially expressed genes in the different datasets. For details of the samples, refers to the original datasets: GSE198033
+The following script was used for analysis of gene corrected (GC) versus GBA1 mutant (MUT) midbrain organoids in three different lines at DIV40. 
+The purpose was to combine, filter, integrate and, identify clusters and differentially expressed genes in the different datasets. 
+For details of the samples, refers to the original datasets: GSE198033
 This script is based on the Seurat tutorials last checked in January 2022 
 •	https://satijalab.org/seurat/articles/integration_introduction.html 
 •	https://ucdavis-bioinformatics-training.github.io/2019-single-cell-RNA-sequencing-Workshop-UCD_UCSF/scrnaseq_analysis/scRNA_Workshop-PART1.html
+
+```{r}
+
+n_cells_monocle <- table(pData(cds)$monocle3_clusters, pData(cds)$orig.ident)
+
+# View table
+View(n_cells_monocle)
+
+write.csv(n_cells_monocle, "n_cells_monocle_21GC_alldates.csv")
+```
 
 
 Part 1. Data preparation:
