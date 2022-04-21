@@ -12,7 +12,8 @@ knitr::opts_chunk$set(echo = TRUE, eval= FALSE)
 ## Introduction
 
 The following script was used for trajectory analysis of gene corrected (GC) midbrain organoids at three different timepoints. 
-Before following this code, you have to generate and process your seurat object according to the tutorial in here: https://github.com/MJPerez-scripts/Organoids/blob/main/Single%20cell%20analysis_Seurat
+Before following this code, you have to generate and process your seurat object according to the tutorial in here: 
+https://github.com/MJPerez-scripts/Organoids/blob/main/Single%20cell%20analysis_Seurat
 
 For details of the samples, refers to the original datasets: GSE198033
 
