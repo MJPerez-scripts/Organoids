@@ -1,0 +1,107 @@
+---
+title: "From Seurat to Monocle3"
+author: "MJP"
+date: "4/21/2022"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, eval= FALSE)
+```
+
+## Introduction
+
+The following script was used for trajectory analysis of gene corrected (GC) midbrain organoids at three different timepoints. 
+Before following this code, you have to generate and process your seurat object according to the tutorial in here: https://github.com/MJPerez-scripts/Organoids/blob/main/Single%20cell%20analysis_Seurat
+
+For details of the samples, refers to the original datasets: GSE198033
+
+# This script is based on the Seurat tutorials last checked in January 2022
+https://rdrr.io/github/satijalab/seurat-wrappers/f/docs/monocle3.Rmd
+http://htmlpreview.github.io/?https://github.com/satijalab/seurat-wrappers/blob/master/docs/monocle3.html
+
+
+
+
+## Part 1. Preparing the data
+```{r}
+# Install and load the libraries
+library(Seurat)
+library(patchwork)
+library(ggplot2)
+library(cowplot)
+library(magrittr)
+library(Signac)
+library(SeuratWrappers)
+library(monocle3)
+library(Matrix)
+library(patchwork)
+library(dplyr)
+set.seed(1234)
+
+#Create monocle3 object
+
+cds <- as.cell_data_set(organoids.combined.sct)
+
+# Cluster the cells
+
+cds <- cluster_cells(cds, resolution = 1e-3)
+p1 <- plot_cells(cds, show_trajectory_graph = F)
+p2 <- plot_cells(cds, color_cells_by = "partition", show_trajectory_graph = F)
+wrap_plots(p1, p2)
+
+# Perform trajectory analysis in each partition
+
+integrated.sub <- subset(as.Seurat(cds, assay = NULL), monocle3_partitions == 1)
+cds <- as.cell_data_set(integrated.sub)
+cds <- learn_graph(cds)
+plot_cells(
+  cds, 
+  label_groups_by_cluster = T,
+  label_leaves = F,
+  label_branch_points = F)
+
+# Extract number of cells
+
+n_cells_monocle <- table(pData(cds)$monocle3_clusters, pData(cds)$orig.ident)
+
+# View table
+View(n_cells_monocle)
+
+write.csv(n_cells_monocle, "n_cells_monocle_21GC_alldates.csv")
+
+# Name the clusters
+colData(cds)$assigned_cell_type <- as.character(clusters(cds)) 
+colData(cds)$assigned_cell_type <- dplyr::recode(colData(cds)$assigned_cell_type,
+                                                 "29" = "Radial Glia",
+                                                 "34" = "Neuron",
+                                                 "19" = "Pericytes",
+                                                 "11" = "NPC",
+                                                 "22" = "OligoAstros")
+
+```
+
+## Part 2. Create pseudotime plots: 
+
+```{r}
+# Pseudotime scale, set and play around with the root
+
+#1. Root based on a gene
+max.avp <- which.max(unlist(FetchData(integrated.sub, c("SOX1"))))
+max.avp <- colnames(integrated.sub)[max.avp]
+cds <- order_cells(cds, root_cells = max.avp)
+plot_cells(cds, color_cells_by = "pseudotime", label_cell_groups = FALSE, label_leaves = FALSE, 
+    label_branch_points = FALSE, show_trajectory_graph = T)
+
+#2. Root based on a cluster
+cds <- order_cells(cds, root_cells = colnames(clusters(cds) == 1))
+plot_cells(cds, color_cells_by = "pseudotime", label_cell_groups = FALSE, label_leaves = FALSE, label_branch_points = FALSE)
+
+
+
+# Set the assay back as 'integrated'
+integrated.sub <- as.Seurat(cds, assay = NULL)
+FeaturePlot(integrated.sub, "monocle3_pseudotime")
+```
+
+
